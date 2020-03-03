@@ -19,18 +19,35 @@
 # - kubectl
 
 set -eo pipefail
-
 test -z "${1}" && echo "label selector required." 1>&2 && exit 1
 
-selector="$1"
+ARGS=""
+while [ $# -gt 0 ]
+do
+  unset OPTIND
+  unset OPTARG
+  while getopts "n:" opt; do
+    case "$opt" in
+      n) namespace=$OPTARG;;
+    esac
+  done
+  shift $((OPTIND-1))
+  ARGS="${ARGS} $1 "
+  shift
+done
+
+selector=$(echo $ARGS | tr -d ' ')
+
+namespace=${namespace:+--namespace $namespace}
+
 while IFS= read -r line; do
     arr+=("$line")
-done < <(kubectl get pods -l="${selector}" -o=jsonpath='{range .items[*].metadata.name}{@}{"\n"}{end}')
+done < <(kubectl get pods ${namespace} -l="${selector}" -o=jsonpath='{range .items[*].metadata.name}{@}{"\n"}{end}')
 
 for po in "${arr[@]}"; do
     (
         set -ex
-        kubectl logs --follow "${po}" --tail=10 \
+        kubectl logs ${namespace} --follow "${po}" --tail=10 \
     ) | sed "s/^/$(tput setaf 3)[${po}] $(tput sgr0)/" &
     # TODO(ahmetb) add more colors and pick one for each pod
 done
